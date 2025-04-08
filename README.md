@@ -1,6 +1,7 @@
 # nokia-gpon-control
 
 Control your Nokia GPON device settings through simple commands.
+
 For model G-2425 and variants.
 
 ## Features
