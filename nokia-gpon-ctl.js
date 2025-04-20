@@ -2,6 +2,7 @@ require('dotenv').config();
 const {By, Builder, Browser} = require('selenium-webdriver');
 const assert = require("assert");
 const {until} = require('selenium-webdriver');
+const {Options} = require('selenium-webdriver/chrome');
 
 // Helper function to wait for alerts and handle them
 async function waitForAlerts(driver, okString) {
@@ -26,7 +27,17 @@ async function initializeDriver() {
     }
   }
 
-  const driver = await new Builder().forBrowser(Browser.CHROME).build();
+  const options = new Options();
+  options.addArguments('--headless=new');  // Modern Chrome headless mode
+  options.addArguments('--disable-gpu');   // Recommended for headless
+  options.addArguments('--no-sandbox');    // Required for some Linux environments
+  options.addArguments('--disable-dev-shm-usage'); // Overcome limited resource problems
+
+  const driver = await new Builder()
+    .forBrowser(Browser.CHROME)
+    .setChromeOptions(options)
+    .build();
+    
   await driver.manage().setTimeouts({implicit: 500});
   return driver;
 }
