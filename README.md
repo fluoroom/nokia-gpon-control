@@ -2,6 +2,8 @@
 
 Control your Nokia GPON device settings through simple commands.
 
+For model G-2425 and variants.
+
 ## Features
 
 ### 1. WiFi Control
