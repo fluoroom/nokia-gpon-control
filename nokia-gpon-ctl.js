@@ -3,6 +3,7 @@ const {By, Builder, Browser} = require('selenium-webdriver');
 const assert = require("assert");
 const {until} = require('selenium-webdriver');
 const {Options} = require('selenium-webdriver/chrome');
+const { spawn } = require('child_process');
 
 // Helper function to wait for alerts and handle them
 async function waitForAlerts(driver, okString) {
@@ -10,11 +11,44 @@ async function waitForAlerts(driver, okString) {
     const alert = await driver.switchTo().alert();
     const alertText = await alert.getText();
     console.log('Error:', alertText);
+    runScript(alertText);
     await alert.accept();
     return false; // Return false to indicate there was an error
   } catch (alertErr) {
     console.log(okString);
+    runScript(okString);    
     return true; // Return true to indicate success
+  }
+}
+
+function runScript(message) {
+  const script = process.env.SCRIPT_LOCATION;
+  if (!script) {
+    return;
+  }
+
+  try {
+    const child = spawn(script, ['"' + message.toString() + '"'], {
+      shell: true  // This ensures it can run shell scripts
+    });
+
+    child.stdout.on('data', (data) => {
+      //console.log(`Script output: ${data}`);
+      //only on success
+      if (data.toString().includes(process.env.SCRIPT_OK_STRING)) {
+        console.log('Script OK');
+      }
+    });
+
+    child.stderr.on('data', (data) => {
+      console.error(`Script error: ${data}`);
+    });
+
+    child.on('close', (code) => {
+      ///console.log(`Script exited with code ${code}`);
+    });
+  } catch (error) {
+    console.error('Failed to run script:', error);
   }
 }
 
@@ -28,18 +62,40 @@ async function initializeDriver() {
   }
 
   const options = new Options();
-  options.addArguments('--headless=new');  // Modern Chrome headless mode
-  options.addArguments('--disable-gpu');   // Recommended for headless
-  options.addArguments('--no-sandbox');    // Required for some Linux environments
-  options.addArguments('--disable-dev-shm-usage'); // Overcome limited resource problems
+  
+  // Headless mode configuration
+  options.addArguments('--headless=new');
+  options.addArguments('--disable-gpu');
+  options.addArguments('--no-sandbox');
+  options.addArguments('--disable-dev-shm-usage');
+  
+  // Additional arguments for headless environment
+  options.addArguments('--disable-software-rasterizer');
+  options.addArguments('--disable-extensions');
+  options.addArguments('--disable-setuid-sandbox');
+  options.addArguments('--remote-debugging-port=9222');
+  options.addArguments('--disable-features=VizDisplayCompositor');
+  options.addArguments('--force-device-scale-factor=1');
+  
+  // Explicitly set display
+  process.env.DISPLAY = ':99';
 
-  const driver = await new Builder()
-    .forBrowser(Browser.CHROME)
-    .setChromeOptions(options)
-    .build();
-    
-  await driver.manage().setTimeouts({implicit: 500});
-  return driver;
+  try {
+    const driver = await new Builder()
+      .forBrowser(Browser.CHROME)
+      .setChromeOptions(options)
+      .build();
+      
+    await driver.manage().setTimeouts({implicit: 3000});
+    return driver;
+  } catch (error) {
+    console.error('Failed to initialize WebDriver:', error.message);
+    console.log('Please ensure the following are installed:');
+    console.log('1. Chromium browser: sudo pacman -S chromium');
+    console.log('2. ChromeDriver: sudo pacman -S chromium-driver');
+    console.log('3. Xvfb: sudo pacman -S xorg-server-xvfb');
+    throw error;
+  }
 }
 
 // Login function
