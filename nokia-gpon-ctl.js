@@ -29,7 +29,8 @@ function runScript(message) {
 
   try {
     const child = spawn(script, ['"' + message.toString() + '"'], {
-      shell: true  // This ensures it can run shell scripts
+      shell: true,
+      stdio: ['pipe', 'pipe', 'pipe'] // Explicitly define stdio to capture all output
     });
 
     child.stdout.on('data', (data) => {
@@ -45,7 +46,7 @@ function runScript(message) {
     });
 
     child.on('close', (code) => {
-      ///console.log(`Script exited with code ${code}`);
+      // Removed console.log for script exit code
     });
   } catch (error) {
     console.error('Failed to run script:', error);
