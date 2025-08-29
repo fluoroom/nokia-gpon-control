@@ -1,8 +1,8 @@
 require('dotenv').config();
-const {By, Builder, Browser} = require('selenium-webdriver');
+const { By, Builder, Browser } = require('selenium-webdriver');
 const assert = require("assert");
-const {until} = require('selenium-webdriver');
-const {Options} = require('selenium-webdriver/chrome');
+const { until } = require('selenium-webdriver');
+const { Options } = require('selenium-webdriver/chrome');
 const { spawn } = require('child_process');
 
 // Helper function to wait for alerts and handle them
@@ -15,9 +15,16 @@ async function waitForAlerts(driver, okString) {
     await alert.accept();
     return false; // Return false to indicate there was an error
   } catch (alertErr) {
-    console.log(okString);
-    runScript(okString);    
-    return true; // Return true to indicate success
+    console.error('Error:', alertErr.message);
+    if (alertErr.message.includes('no such alert')) {
+      console.log('No alert present');
+      console.log(okString);
+      runScript(okString);
+      return true;
+    }
+    runScript(alertErr.message);
+    console.log(alertErr.message);
+    return false; // Return true to indicate success
   }
 }
 
@@ -63,13 +70,13 @@ async function initializeDriver() {
   }
 
   const options = new Options();
-  
+
   // Headless mode configuration
   options.addArguments('--headless=new');
   options.addArguments('--disable-gpu');
   options.addArguments('--no-sandbox');
   options.addArguments('--disable-dev-shm-usage');
-  
+
   // Additional arguments for headless environment
   options.addArguments('--disable-software-rasterizer');
   options.addArguments('--disable-extensions');
@@ -79,7 +86,7 @@ async function initializeDriver() {
   options.addArguments('--force-device-scale-factor=1');
   options.addArguments('--accept-insecure-certs');
   options.addArguments('--ignore-certificate-errors');
-  
+
   // Explicitly set display
   process.env.DISPLAY = ':99';
 
@@ -88,8 +95,8 @@ async function initializeDriver() {
       .forBrowser(Browser.CHROME)
       .setChromeOptions(options)
       .build();
-      
-    await driver.manage().setTimeouts({implicit: 3000});
+
+    await driver.manage().setTimeouts({ implicit: 3000 });
     return driver;
   } catch (error) {
     console.error('Failed to initialize WebDriver:', error.message);
@@ -112,45 +119,57 @@ async function login(driver) {
   await passwordInput.sendKeys(process.env.MODEM_PASSWORD);
   await loginButton.click();
   await driver.sleep(1000);
+  console.log('Logged in');
 }
 
 // Helper function to handle WiFi state changes
 async function setWiFiState(driver, enable, is24GHz = false, maxRetries = 3) {
   const network = is24GHz ? '2.4GHz' : '5GHz';
   const state = enable ? 'enabled' : 'disabled';
-  
+  console.log(`Setting ${network} to ${state}`);
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const url = is24GHz 
-      ? process.env.MODEM_HOST + '/wlan_config.cgi'
-      : process.env.MODEM_HOST + '/wlan_config.cgi?v=11ac';
-      
-    await driver.get(url);
-    await driver.wait(until.elementLocated(By.name('wl_enable')), 5000);
-    let enableCheckbox = await driver.findElement(By.name('wl_enable'));
-    
-    // Get current state
-    const isCurrentlyEnabled = await enableCheckbox.isSelected();
-    
-    // Only click if the current state doesn't match desired state
-    if (isCurrentlyEnabled !== enable) {
-      await enableCheckbox.click();
+    try {
+      const url = is24GHz
+        ? process.env.MODEM_HOST + '/wlan_config.cgi'
+        : process.env.MODEM_HOST + '/wlan_config.cgi?v=11ac';
+
+      await driver.get(url);
+      await driver.wait(until.elementLocated(By.name('wl_enable')), 20000);
+      let enableCheckbox = await driver.findElement(By.name('wl_enable'));
+
+      // Get current state
+      const isCurrentlyEnabled = await enableCheckbox.isSelected();
+
+      // Only click if the current state doesn't match desired state
+      if (isCurrentlyEnabled !== enable) {
+        console.log(`Change needeed for ${network} to ${state}`);
+        console.log(`Click: Checking ${network} to ${state}`);
+        await enableCheckbox.click();
+      } else {
+        console.log(`WiFi ${network} is already ${state}`);
+        return;
+      }
+
+      let saveButton = await driver.findElement(By.css('input[type="submit"]'));
+      await driver.sleep(1000);
+      console.log(`Click: Saving ${network} to ${state}`);
+      await saveButton.click();
+
+      const success = await waitForAlerts(driver, `${network} ${state}`);
+      if (success) {
+        return; // Operation succeeded, exit the function
+      }
+
+    } catch (error) {
+      console.error(error.message);
     }
-    
-    let saveButton = await driver.findElement(By.css('input[type="submit"]'));
-    await driver.sleep(1000);
-    await saveButton.click();
-    
-    const success = await waitForAlerts(driver, `${network} ${state}`);
-    if (success) {
-      return; // Operation succeeded, exit the function
-    }
-    
     if (attempt < maxRetries) {
       console.log(`Attempt ${attempt} failed. Retrying...`);
       await login(driver);
       await driver.sleep(2000); // Wait a bit before retrying
     } else {
-      console.error(`Failed to set ${network} WiFi state after ${maxRetries} attempts`);
+      console.log(`Failed to ${state} ${network} after ${maxRetries} attempts`);
     }
   }
 }
@@ -168,12 +187,12 @@ async function wifiOff(driver, is24GHz = false) {
 // Main control function
 async function modemControl(command, network, state) {
   let driver;
-  
+
   try {
     driver = await initializeDriver();
     await login(driver);
-    
-    switch(network) {
+
+    switch (network) {
       case '5':
         await setWiFiState(driver, state === 'on', false);
         break;
@@ -187,9 +206,10 @@ async function modemControl(command, network, state) {
       default:
         throw new Error('Invalid network specified. Use: 5, 2.4, or all');
     }
-    
+
   } catch (e) {
     console.error('Error:', e.message);
+    runScript(e.message);
     throw e;
   } finally {
     if (driver) {
@@ -201,7 +221,7 @@ async function modemControl(command, network, state) {
 // Parse command line arguments
 function parseArgs() {
   const args = process.argv.slice(2);
-  
+
   if (args.length !== 3 || args[0] !== 'wifi') {
     console.error('Usage: nokia-gpon-ctl wifi <network> <state>');
     console.error('network: 5, 2.4, or all');
@@ -210,12 +230,12 @@ function parseArgs() {
   }
 
   const [command, network, state] = args;
-  
+
   if (!['5', '2.4', 'all'].includes(network)) {
     console.error('Network must be 5, 2.4, or all');
     process.exit(1);
   }
-  
+
   if (!['on', 'off'].includes(state)) {
     console.error('State must be on or off');
     process.exit(1);
