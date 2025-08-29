@@ -77,6 +77,7 @@ async function initializeDriver() {
   options.addArguments('--remote-debugging-port=9222');
   options.addArguments('--disable-features=VizDisplayCompositor');
   options.addArguments('--force-device-scale-factor=1');
+  options.addArguments('--accept-insecure-certs');
   
   // Explicitly set display
   process.env.DISPLAY = ':99';
