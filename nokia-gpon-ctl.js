@@ -78,6 +78,7 @@ async function initializeDriver() {
   options.addArguments('--disable-features=VizDisplayCompositor');
   options.addArguments('--force-device-scale-factor=1');
   options.addArguments('--accept-insecure-certs');
+  options.addArguments('--ignore-certificate-errors');
   
   // Explicitly set display
   process.env.DISPLAY = ':99';
